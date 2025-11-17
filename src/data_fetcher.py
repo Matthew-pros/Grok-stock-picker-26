@@ -1,23 +1,43 @@
 import yfinance as yf
-from polygon import RESTClient
+from massive import RESTClient  # Změna z polygon
 import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 from datetime import datetime, timedelta
+import os
+import logging
+import time  # Pro rate limit sleep
+from typing import Dict, Any, List
+
+# Logging pro API chyby (z docs: doporučeno pro debugging)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class DataFetcher:
-    def __init__(self, polygon_key):
-        self.client = RESTClient(api_key=polygon_key)
+    def __init__(self, api_key: str):
+        self.api_key = api_key or 'demo'  # Fallback na demo mode
+        self.client = None
+        try:
+            self.client = RESTClient(self.api_key)
+            # Test call: Snapshot pro validaci (z docs příkladů)
+            snapshot = self.client.get_snapshot_all("AAPL")
+            logger.info("Massive API key valid and initialized.")
+        except Exception as e:
+            logger.warning(f"Massive API error: {e}. Falling back to yfinance/demo mode.")
+            self.client = None
     
-    def get_earnings_calendar(self, start_date, end_date):
-        # Scrape Yahoo Earnings Calendar
+    def _handle_rate_limit(self):
+        """Sleep při rate limit (z docs: 5 calls/min free tier)"""
+        time.sleep(12)  # 60s / 5 calls
+    
+    def get_earnings_calendar(self, start_date: str, end_date: str) -> pd.DataFrame:
+        # Massive nemá přímý calendar; scrape Yahoo (stejné jako dříve)
         url = f"https://finance.yahoo.com/calendar/earnings?from={start_date}&to={end_date}"
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        # Parse tabulku – jednoduchá verze, rozšiřit pro robustnost
-        tickers = []  # Extrahuj z <td> tags, např. NVDA, HD atd.
-        # Simulace: Použij yfinance pro tickers
-        universe = ['NVDA', 'HD', 'PDD', 'WMT', 'TGT', 'MDT', 'AMD', 'SMCI', 'APH', 'ADBE', 'PGR', 'EME', 'DOV', 'IREN', 'ARWR']
+        try:
+            response = requests.get(url)
+            soup = BeautifulSoup(response.text, 'html.parser')
+            # Zjednodušený parse: Fixed universe z analýzy pro demo
+            universe = ['NVDA', 'HD', 'PDD', 'WMT', 'TGT', 'MDT', 'AMD', 'SMCI', 'APH', 'ADBE', 'PGR', 'EME', 'DOV', 'IREN', 'ARWR']
         df = pd.DataFrame({'ticker': universe, 'date': [start_date]*len(universe)})
         return df
     
